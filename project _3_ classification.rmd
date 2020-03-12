@@ -1,6 +1,6 @@
 ---
 title: "Porto Seguro’s Safe Driver Prediction"
-author: "游筑鈞 劉得心 李駿"
+author: ""
 date: "2019年6月20日"
 output: 
   revealjs::revealjs_presentation:
