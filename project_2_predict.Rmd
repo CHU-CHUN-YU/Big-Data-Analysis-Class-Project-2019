@@ -1,0 +1,934 @@
+---
+title: "Predict USDA Multifamily Housing Program Loan Amount"
+output: html_document
+author: ""
+---
+此筆資料總共有 52個變數 以及 14076個觀測值
+16個連續型變數
+
+<br>
+
+#變數介紹
+
+
+Project Number:
+Administrative project number. This number must be combined with two others to identify a specific property. Individual properties can be identified by Project Number, followed by Project ID, followed by Project Check Digit. This facilitates linking across other publicly available property data.
+
+
+Project ID：
+Administrative project number. This number must be combined with two others to identify a specific property. Individual properties can be identified by Project Number, followed by Project ID, followed by Project Check Digit. This facilitates linking across other publicly available property data.
+
+
+Project Check Digit：
+Administrative project number. This number must be combined with two others to identify a specific property. Individual properties can be identified by Project Number, followed by Project ID, followed by Project Check Digit. This facilitates linking across other publicly available property data.
+
+
+Handicapped Units (連續)：
+Total number of units that have a unit type designation as being handicap-accessible
+
+
+Rental Type：
+Indicates the type of housing provided at the property: Family, Elderly, Mixed (some family units and some elderly units), Congregate (must be elderly), or Group Home
+
+
+Rural Housing/Labor Housing：
+Indicates that the property is Section 515 Rural Rental Housing, Section 514 Off-Farm Farm Labor Housing, or Section 514 On-Farm Farm Labor Housing
+
+
+Date of Operation：
+Date of operation of the project. This is equal to the initial date of the loan on the project, but may have been changed and/or made equal to the date of the old project if the new project is the result of a transfer or consolidation
+
+
+Revitilization Indicator：
+Indicator that the project is part of the USDA Rural Housing Service Multifamily Preservation and Revitalization Demonstration Program (MPR): Yes or No
+
+
+Loan Payoff Year：
+This is the estimated year during which the loan is expected to payoff, based on its prepayment status, current unpaid principal balance, and payment status.
+
+
+Tax Credit Expires：
+If there are federal Low Income Housing Tax Credits (LIHTC) associated with the project, then this is the date those tax credits expire
+
+
+Prepay Eligible Date Year：
+If the loan is eligible to prepay, this is the year during which it became eligible to prepay. If the loan is not eligible to prepay, this is the year during which it will reach the natural maturity of its loan term.
+
+
+Estimated Property Exit Year：
+This is the estimated year during which the property is expected to payoff its final USDA loan and exit the program, based on the Loan Payoff Year of every loan on the property. This number is the same across all loans on the same property.
+
+
+Year Restrictive Clause Expires：
+If the project has restrictive use clauses associated to its buy out of the program, then this is the year the restrictive clause expires
+
+
+Rental Assistance Units (連續)：
+Number of USDA Section 521 Rental Assistance Units authorized to the project
+
+
+Latitude (連續)：
+Latitude coordinates of property location
+
+
+Longitude (連續)：
+Longitude coordinates of property location
+
+
+Property Name：
+Name of the property
+
+
+Main Address 1：
+Line one of the physical address of the project
+
+
+Main Address 2：
+Line two of the physical address of the project
+
+
+Main Address 3：
+Line three of the physical address of the project
+
+
+City：
+City in which project is located
+
+
+State：
+State in which project is located
+
+
+Zip Code：
+Zip code in which project is located
+
+
+Tax Credit Indicator：
+Indicator that the project is financed with federal Low Income Housing Tax Credits (LIHTC): Y or N
+
+
+State County FIPS Code：
+State-County FIPS code where the project is located
+
+
+Borrower Type：
+Organizational type of borrower: Individual, Public Body, Corporation, Limited Partnership,General Partnership
+
+
+Borrower Name 2：
+Alternative listing of borrower name
+
+
+Borrower Address：
+Line one of borrower address (removed if borrower is an individual)
+
+
+Borrower Address 3：
+Line two of borrower address (removed if borrower is an individual)
+
+
+Borrower Address 4：
+Line three of borrower address (removed if borrower is an individual)
+
+
+Prepay Eligible：
+If the loan is eligible to prepay, based on loan closing date: True or False
+
+
+Borrower Profit Type：
+Profit type of the project: Full Profit, Limited Profit, or Nonprofit
+
+
+Data As-Of Date：
+Date as of which this dataset’s actual and estimated values are current
+
+
+Remaining Term Days (連續)：
+Remaining loan term as of Data As-Of Date in this dataset, as number of days
+
+
+Interest Rate at Loan Closing (%) (連續)：
+Interest rate at the time of loan closing, as a percent
+
+
+FY of Loan Obligation：
+Fiscal Year during which the loan obligation was made
+
+
+1 BR Units (連續)：
+Total number of 1 bedroom units in the project
+
+
+2 BR Units (連續)：
+Total number of 2 bedroom units in the project
+
+
+3 BR Units (連續)：
+Total number of 3 bedroom units in the project
+
+
+4 BR Units (連續)：
+Total number of 4 bedroom units in the project
+
+
+5 BR Units (連續)：
+Total number of 5 bedroom units in the project
+
+
+6 BR Units (連續)：
+Total number of 6 bedroom units in the project
+
+
+Original Loan Term (連續)：
+Original loan term at loan closing
+
+
+Borrower City State：
+City and state of borrower address
+
+
+Borrower ID：
+Assigned borrower number.
+
+
+Balloon?：
+Balloon payment: True or False
+
+
+Number of Total Units (連續)：
+Total units in project
+
+
+Vacant Units (連續)：
+Number of vacant units
+
+
+Management Name：
+Management agent
+
+
+Borrower Name：
+Name of borrower
+
+
+Loan Amount (連續)：
+Amount of loan
+
+
+```{r,include=FALSE}
+library('ggcorrplot')
+library('ggmap')
+library('rpart')
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(caret)
+library(lars)
+library(glmnet)
+library(Matrix)
+library(foreach)
+library(MLmetrics)
+library(pls)
+library(pcr)
+library(caret)
+library(lattice)
+library(mgcv)
+```
+
+<br>
+
+###Cleaning Data
+
+(一) 資料集中變數有問號或是有空格把它當成遺失值。
+
+(二) 在變數之中，查看其遺失值數量。
+
+(三) 變數之中的遺失比率小於1，故直接刪除擁有遺失值的觀測值。
+
+(四) 把變數Loan.Amt(貸款金額) 轉成numeric的形式。
+
+```{r , echo = FALSE,message=FALSE,warning=FALSE}
+#cleaning missing values
+p2=read.csv("USDA Multifamily Housing Program Exit Data.csv")
+p2_original<-p2
+
+register_google(key = 'AIzaSyBE7fZjcqRTbjmxQapnDd6QYq2NX1mTi2I')
+
+#X6.BR.Units 的變異為0 故刪除
+a=c(3,11,12,13,15,16,20,21,22,23,24,26,27,39,40,41,42)
+p2<-p2[,a]
+
+missing_values <- p2 %>% summarize_all(funs(sum(is.na(.))+sum(.==" ",na.rm=T)))
+missing_values <- gather(missing_values, key="feature", value="missing_pct")
+missing_values %>% 
+  ggplot(aes(x=reorder(feature,-missing_pct),y=missing_pct)) +
+  geom_bar(stat="identity",fill="red")+xlab("Variable")+ylab("Missing Count")+
+  coord_flip()+theme_bw()
+##
+p2<-na.omit(p2)
+#因為State變數中存在一個""的分類，它的位置在最後一個row，
+p2<-p2[-14067,]
+#因rental.type中有個分類為"??"，把它刪除
+p2[p2$Rental.Type=="??",]$Rental.Type<-NA
+p2<-na.omit(p2)
+#把loan.Amt 轉成numeric
+p2$Loan.Amt <- as.numeric(gsub('[$,]', '',p2$Loan.Amt))
+##
+p2=p2[-which(p2$Rental.Type=='Group Home'),]
+p2$Rental.Type=droplevels(p2$Rental.Type)
+
+```
+
+<br>
+
+##探索性資料分析與視覺化
+
+####相關矩陣
+
+
+```{r,echo = FALSE,fig.cap="(圖一)"}
+##eda
+
+##相關矩陣
+#刪除X6.BR.Units,因整列皆為0
+p2_continuous<-p2[,c(2,7,8,9,10,11,12,13,14,15,17)]
+corr <- round(cor(p2_continuous), 1)
+ggcorrplot(corr, hc.order = TRUE, type = "lower",
+           lab = TRUE)
+
+```
+
+由（圖一）的相關矩陣熱圖可以發現：
+
+1.Total number of 4 or 5 bedroom units in the project 越多 Interest Rate at Loan Closing 越低
+
+2.Interest Rate at Loan Closing 越高 Original Loan Term 越長。貸款期間越長，最後還款利率越高。
+
+3.Total units in project 越多，可貸款數額越高
+
+```{r,echo=FALSE,fig.cap="(圖二)"}
+##
+ggplot(p2,aes(y=Loan.Amt))+geom_boxplot(aes(x=State),col="green3")+theme(axis.text.x=element_text(vjust=0.1,angle=90))
+```
+
+
+Portland地區的貸款金額的中位數為各州最高，而北達科他州的中位數為最低。
+
+
+
+
+```{r,echo=FALSE,fig.cap="(圖三)"}
+##
+ggplot(p2, aes(x=Orig.Loan.Term, y=Loan.Amt)) + 
+  geom_point(aes(col=Rental.Type))
+```
+
+原始的貸款期間在30個月、33個月、50個月的房子，其貸款到的金額平均來說是較高的，且整體租屋對象又以家庭和老人為最多
+
+
+
+
+```{r,echo=FALSE,fig.cap="(圖四)"}
+ggplot(p2, aes(x=Interest.Rate.at.Loan.Closing.., y=Loan.Amt)) + 
+  geom_point(aes(col=Rental.Type))
+```
+
+租屋類型為Family的還款利率範圍較廣。
+
+值得注意的是：沒有一筆資料的還款利率在2%~3%之間。
+
+
+
+
+```{r,echo=FALSE,fig.cap="(圖五)"}
+##
+ggplot(p2,aes(y=Loan.Amt))+
+  geom_point(aes(Number.of.Total.Units,col=Rural.Housing.Labor.Housing...Section.of.Housing.Act))
+```
+
+所有propertise中，Rural Housing是最多的，且房間數大多集中在0~150間左右，
+有幾間不在農場內的房子房間數特別多，但其貸款到的金額卻沒有特別高，
+因此房間總數越多不代表可以貸款到越多的錢
+
+
+
+```{r,echo=FALSE,fig.cap="(圖六)"}
+##
+ggplot(p2,aes(y=Loan.Amt))+
+  geom_point(aes(Number.of.Total.Units,col=Tax.Credit.Indicator))
+
+```
+
+有政府資助的貸款者會選擇的貸款金額較高。
+
+
+
+```{r,echo=FALSE,fig.cap="(圖七)",message=FALSE,warning=FALSE}
+
+mapImageData <- get_map(location = 'States',zoom=4)
+ggmap(mapImageData, extent = "device") +
+  geom_point(aes(x = Longitude,
+                 y = Latitude),
+            data = p2_original,
+             colour = "#56B4E9",
+            alpha = .1,
+             size = 4)
+
+```
+
+參與此計畫的貸款人房屋位置多集中在美東地區。
+
+
+```{r,,echo=FALSE,fig.cap="(圖八)"}
+##注意一下group home
+g <- ggplot(p2, aes(Rental.Type, Loan.Amt))
+g + geom_boxplot(varwidth=T, fill="#56B4E9") + 
+  labs(title="Box plot", 
+       subtitle="Rental type to Loan Amount",
+       caption="Source: mpg",
+       x="Rental Type",
+       y="Loan Amount")
+```
+
+集合住宅的中位數為四者最高。
+
+
+```{r,echo=FALSE,fig.cap="(圖九)"}
+##刪除outliers
+ggplot(p2,aes(y=Loan.Amt))+geom_boxplot()
+outliers=boxplot(p2$Loan.Amt, plot=FALSE)$out
+p2=p2[-which(p2$Loan.Amt %in% outliers),]
+```
+
+刪除貸款金額(反應變數)之中的Outliers。
+
+```{r,echo=FALSE}
+# drop state
+p2_del_state<-p2[,-1]
+
+hist(p2_del_state$Loan.Amt)
+```
+
+原資料反應變數為右偏，開根號做轉換。
+
+```{r,echo=FALSE}
+hist(sqrt(p2_del_state$Loan.Amt))
+```
+
+開根號後的反應變數分布為不偏。
+
+```{r, echo=FALSE}
+##分trainging data(80%) & testing data(20%)
+set.seed(99)
+train<-sample(1:dim(p2_del_state)[1],round(dim(p2_del_state)[1]*0.8),replace = F)              
+
+p2_train<-p2_del_state[train,]
+p2_test<-p2_del_state[-train,]
+
+```
+
+將資料集分成兩個部分：
+Testing Data (80%的原始data) & 
+Training Data(20%的原始data)
+
+#Linear model without selection
+
+把Training Data 分成 70%(Training) & 30%(Validation)
+用10-Fold-Cross-Validation找出最好Linear model without selection。
+
+```{r, echo=FALSE}
+##  linear model without selection--1
+
+ctrl <-caret::trainControl(method = "cv",number=10,p=0.7)
+lm01.fit<-train(sqrt(Loan.Amt)~.,data =p2_train,method="lm" ,trControl = ctrl,preProcess=c("scale","center"))
+lm01.fit$bestTune
+```
+
+
+#####Train Validation的RMSE
+
+```{r, echo=FALSE}
+lm01.fit$results
+```
+
+
+用10-Fold-Cross-Validation找出Linear model without selection的參數估計值。
+
+```{r, echo=FALSE}
+lm01.fit$finalModel
+```
+
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+RMSE：
+```{r, echo=FALSE}
+##lm01.fit.pred
+set.seed(123)
+n=nrow(p2_test)
+RMSE=0
+Rsquare=0
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=p2_test[v,]
+    predictions <-  lm01.fit %>% predict(btest)
+    RMSE[i]=caret::RMSE(predictions, sqrt(btest$Loan.Amt))
+    Rsquare[i] = caret::R2(predictions, sqrt(btest$Loan.Amt))
+}
+RMSE
+```
+
+Rsquare：
+```{r, echo=FALSE}
+Rsquare
+```
+
+PMSE：
+```{r, echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE  
+```
+
+#Linear model with AIC selection
+
+使用Forward Stepwise，選出AIC最低的model，結果為剔除變數 "X1.BR.Units" & "X2.BR.Units" 後的AIC為最低。
+
+把Training Data 分成 70%(Training) & 30%(Validation)，
+再使用選好的模型去做10-Fold-Cross-Validation找出最好Linear model。
+
+
+```{r, include=FALSE}
+##  linear model with AIC selection--2
+null = lm(sqrt(Loan.Amt) ~ 1, data = p2_train)  
+full = lm(sqrt(Loan.Amt) ~ ., data = p2_train)
+##forward stepwise
+forward.lm=step(null, scope=list(lower=null, upper=full), direction="forward")
+##取AIC最小的，所以把X1.BR.Units, X2.BR.Units刪除
+```
+
+```{r,echo=FALSE}
+forward.lm
+#segment data into train and testing.moreover,seperate train data into trainn and validation
+```
+
+
+Linear model with AIC selection做10-Fold-Cross-Validation的RMSE & Rsquared：
+```{r,echo=FALSE}
+p2_train_dropx5<-p2_train[,-c(6,7)]
+
+
+lm.ctrl <- trainControl(method = "cv", number = 10, p=0.7,returnResamp='all', search='grid',savePredictions='all',selectionFunction = 'best')
+
+
+lm_fit_train <- train(sqrt(Loan.Amt)~., data =p2_train_dropx5,method = "lm",preProcess=c('center','scale')
+                      ,trControl = lm.ctrl)
+lm_fit_train$resample
+```
+
+
+Train Validation的RMSE：
+```{r,echo=FALSE}
+lm_fit_train$results;
+```
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+RMSE：
+```{r,,echo=FALSE}
+
+
+#Prediction
+set.seed(123)
+p2_test_dropx5<-p2_test[,-c(6,7)]
+
+
+n=nrow(p2_test_dropx5)
+RMSE=0
+Rsquare=0
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=p2_test_dropx5[v,]
+    predictions <-  lm_fit_train %>% predict(btest)
+    RMSE[i]=caret::RMSE(predictions, sqrt(btest$Loan.Amt))
+    Rsquare[i] = caret::R2(predictions, sqrt(btest$Loan.Amt))
+}
+RMSE
+```
+
+
+Rsquare：
+```{r,echo=FALSE}
+Rsquare
+```
+
+PMSE：
+```{r,echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE
+```
+
+
+#Ridge Regression
+
+把Training Data 分成 70%(Training) & 30%(Validation) 用10-Fold-Cross-Validation找出最適的Lambda值。
+
+Lambda值為：
+
+```{r,echo=FALSE}
+####ridge
+
+ridge.fit<-train(sqrt(Loan.Amt)~.,data =p2_train,method="ridge" , trControl = ctrl,scale = TRUE,tuneLength = 10,
+                 preProcess=c("scale","center"),resamples="all")
+
+ridge.fit$bestTune
+```
+
+
+RMSE:
+```{r,echo=FALSE}
+ridge.fit$results[6,]
+```
+
+
+
+```{r,echo=FALSE}
+
+x <- model.matrix( ~ .-Loan.Amt, p2_train)[,-1]
+y=sqrt(p2_train[,"Loan.Amt"])
+ridge<-glmnet(x=x,y=sqrt(p2_train[,"Loan.Amt"]),alpha=0,family = "gaussian",lambda=0.003162278)
+```
+
+
+
+將找出的Lambda值代入模型中找出各項參數估計值，其結果如下：
+```{r,echo=FALSE}
+coef(ridge)
+```
+
+
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+RMSE：
+```{r,echo=FALSE}
+# Make predictions
+# Model performance metrics
+set.seed(123)
+n=nrow(p2_test)
+RMSE=0
+Rsquare=0
+for (i in 1:5){
+  v=sample(1:n,size=n,replace=T)
+  p2_test1=p2_test[v,]
+  x_test=model.matrix(~.-Loan.Amt,p2_test1)[,-1]
+  predictions=predict(ridge,x_test)
+  RMSE[i]=caret::RMSE(predictions, sqrt(p2_test1$Loan.Amt))
+  Rsquare[i] = caret::R2(predictions, sqrt(p2_test1$Loan.Amt))
+}
+RMSE
+```
+
+Rsquare：
+```{r,echo=FALSE}
+Rsquare
+```
+
+PMSE：
+```{r,echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE
+```
+
+
+
+#Lasso Regression
+把Training Data 分成 70%(Training) & 30%(Validation) 用10-Fold-Cross-Validation找出Lambda值。
+Lambda值為：
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+####lasso
+
+x <- model.matrix( ~ .-Loan.Amt, p2_train)[,-1]
+y=sqrt(p2_train[,"Loan.Amt"])
+lasso.fit <- train(x,y, method = "glmnet", trControl = ctrl,preProcess=c("center","scale"),tuneLength = 10)
+plot(lasso.fit)
+lasso.fit$bestTune
+```
+
+
+RMSE:
+```{r,echo=FALSE}
+lasso.fit$results[4,]
+
+```
+
+
+```{r,echo=FALSE}
+lasso<-glmnet(x=x,y=y,alpha=1,lambda=0.7325801,family = "gaussian")
+```
+
+
+將找出的Lambda值代入模型中找出各項參數估計值，其結果如下：
+```{r,echo=FALSE}
+coef(lasso)
+# Make predictions
+```
+
+
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+
+```{r,echo=FALSE}
+set.seed(123)
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    p2_test1=p2_test[v,]
+    x_test=model.matrix(~.-Loan.Amt,p2_test1)[,-1]
+    predictions=predict(lasso.fit,x_test)
+    RMSE[i]=caret::RMSE(predictions, sqrt(p2_test1$Loan.Amt))
+    Rsquare[i] = caret::R2(predictions, sqrt(p2_test1$Loan.Amt))
+}
+```
+
+
+RMSE：
+```{r,echo=FALSE}
+RMSE
+```
+
+Rsquare：
+```{r,echo=FALSE}
+Rsquare
+```
+
+PMSE：
+```{r,echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE
+```
+
+
+
+|Model    |LM     |Ridge   |Lasso   |
+|:--------|-------:|:-------:|-------|
+|Intercept|   743.9645    | 112.8025352|99.153281|
+|Number.of.Total.Units| 39.2099 |3.9539206|5.063682|
+|Rental.TypeElderly |-2.5729 |-5.4526354|-1.547350|
+|Rental.TypeFamily | -0.3896 |-0.7789132|.|
+|Rental.TypeMixed |  -0.0326|-0.1171775|.|
+|Rural.Housing.On-Farm |-24.1711|-177.9671119|-152.721589|
+|Rural.Housing.Rural Housing|-34.8190|-183.4764434|-154.154963|
+|Revitalization.IndicatorYes |-1.3982  | -6.2046879|-4.367655|
+|Tax.Credit.IndicatorY |  65.5032|  132.4325336|131.278125|
+|X1.BR.Units | 64.8528| 2.4661320|1.242449|
+|X2.BR.Units| 58.5339| 2.3951491|1.240463|
+|X3.BR.Units| 21.6888|  0.9928698|.|
+|X4.BR.Units| -7.3085|-6.0307661|-6.398024|
+|X5.BR.Units |  -3.9438|-27.8219565|-25.840728|
+|Handicapped.Units|9.8836 |4.1770220| 3.906404|
+|Vacant.Units  |  -7.5879|-1.9159261|-1.530725|
+|Interest.Rate.at.Loan.Closing..|  34.7124| 11.9939722|11.253141|
+|Balloon.TRUE|78.6016| 172.9730072|166.458483|
+|Orig.Loan.Term | 105.6963|10.3802204|10.195667|
+
+
+|   |LM     |Ridge   |Lasso   |
+|:--------|-------:|:-------:|-------|
+| Rsquared  |  0.3141543 |  0.3407808  | 0.3219567|
+| RMSE      |  258.1812 |   255.611     | 258.9716|
+| PMSE      | 66500.46  |  66520.17 |  65345.06 | 
+
+
+
+1.用 ridge also 來解決這筆資料因為自變量相關性較高法，一般線型模型在輕微變化下，可能非常敏感。導致系數可能值不穩定。
+
+2.相關係數圖中可以看出x3-x4高度相關，Lasso會選擇將其中一個變量的估計參數的收縮為零。但是ridge只將兩者的參數估計壓縮，降低影響。
+
+3.Total unit 和x2 高度相關，lass 和ridge 都選擇壓縮估計參數，降低因共線性造成的誤差。
+
+4.Lasso 找出某一類別變數（rental type)中，列別的共線性問題，因此將三個列別壓縮為一個
+
+
+
+
+
+
+
+#Principal Component Regression
+把Training Data 分成 70%(Training) & 30%(Validation) 用10-Fold-Cross-Validation找出多少個主成分可以不再讓RMSE急遽下降
+
+```{r,echo=FALSE,fig.cap="(圖十)"}
+###PCR (principal component regression) 主成分回歸
+pcr.fit<-train(sqrt(Loan.Amt)~.,data =p2_train,method="pcr" ,tuneLength = 10,trControl = ctrl,scale = TRUE,preProcess=c("scale","center"))
+# Plot model RMSE  of components
+plot(pcr.fit)
+
+```
+
+
+由下表可知該找出10個主成分。
+```{R,echo=FALSE}
+# Print the best tuning parameter ncomp that
+pcr.fit$bestTune
+```
+
+
+10個主成分可以解釋資料的87.62%的變異。
+```{r,echo=FALSE}
+summary(pcr.fit$finalModel)
+```
+
+
+在選取10個主成分後，Training Data中的RMSE為：
+```{r,echo=FALSE}
+pcr.fit$results$RMSE[10]
+```
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+RMSE：
+```{r,echo=FALSE}
+##pcr.pred
+set.seed(123)
+n=nrow(p2_test)
+RMSE=0
+Rsquare=0
+for (i in 1:5){
+  v=sample(1:n,size=n,replace=T)
+  btest=p2_test[v,]
+  predictions <-  pcr.fit %>% predict(btest)
+  RMSE[i]=caret::RMSE(predictions, sqrt(btest$Loan.Amt))
+  Rsquare[i] = caret::R2(predictions,sqrt(btest$Loan.Amt))
+}
+RMSE
+```
+
+Rsquare：
+```{r,echo=FALSE}
+Rsquare
+```
+
+PMSE：
+```{r,echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE
+
+```
+
+#Partial Least Squares Regression
+把Training Data 分成 70%(Training) & 30%(Validation) 用10-Fold-Cross-Validation找出多少個主成分可以不再讓RMSE急遽下降。
+
+由下表可知該找出9個主成分。
+```{r,echo=FALSE,fig.cap="(圖十一)"}
+####partial least squares
+pls.fit<-train(sqrt(Loan.Amt)~.,data =p2_train,method="pls" ,tuneLength = 16,trControl = ctrl,scale = TRUE,preProcess=c("scale","center"))
+
+plot(pls.fit)
+pls.fit$bestTune
+```
+
+9個主成分可以解釋資料的75.77%的變異。
+```{r,echo=FALSE}
+summary(pls.fit$finalModel)
+```
+
+RMSE:
+
+```{r}
+pls.fit$results[9,]
+```
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+Rsquare：
+```{r,echo=FALSE}
+# Make predictions
+set.seed(123)
+n=nrow(p2_test)
+RMSE=0
+Rsquare=0
+for (i in 1:5){
+  v=sample(1:n,size=n,replace=T)
+  btest=p2_test[v,]
+  predictions <-  pls.fit %>% predict(btest)
+  RMSE[i]=caret::RMSE(predictions, sqrt(btest$Loan.Amt))
+  Rsquare[i] = caret::R2(predictions, sqrt(btest$Loan.Amt))
+}
+Rsquare
+```
+
+RMSE：
+```{r,echo=FALSE}
+RMSE
+```
+
+
+PMSE：
+```{r,echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE
+```
+
+
+
+#Genalized Addictive Model
+把Training Data 分成 70%(Training) & 30%(Validation) 用10-Fold-Cross-Validation找出模型自由度：
+
+```{r,echo=FALSE}
+####gam
+gam.fit<-train(sqrt(Loan.Amt)~.,data =p2_train,method="gam" , trControl = ctrl,scale = TRUE,tuneLength = 10
+               ,preProcess=c("scale","center"),resamples="all",tunegrid=data.frame(method="GCV.Cp",selecet=TRUE))
+gam.fit$results
+gam.fit[[11]]
+```
+
+```{r,echo=FALSE}
+# Make predictions
+# Model performance metrics
+set.seed(123)
+n=nrow(p2_test)
+RMSE=0
+Rsquare=0
+for (i in 1:5){
+  v=sample(1:n,size=n,replace=T)
+  btest=p2_test[v,]
+  predictions <-  gam.fit %>% predict(btest)
+  RMSE[i]=caret::RMSE(predictions, sqrt(btest$Loan.Amt))
+  Rsquare[i] = caret::R2(predictions, sqrt(btest$Loan.Amt))
+}
+```
+
+####使用Testing Data, 做5-Fold-Bootstrap：
+
+RMSE：
+```{r,echo=FALSE}
+RMSE
+```
+
+Rsquare：
+```{r,echo=FALSE}
+Rsquare
+```
+
+PMSE：
+```{r,echo=FALSE}
+PMSE=mean(RMSE^2)
+PMSE
+```
+
+<br>
+<br>
+
+#各式模型比較
+
+|           |         LM| LM with AIC|       Ridge|      Lasso|        PCR|       PLSR|         GAM|
+|:----------|-----------|-----------:|:----------:|-----------|-----------|-----------|-----------:|
+| train RMSE|   258.1812|    258.2415|    258.2981|   258.2733|   266.5839|    258.2569|   269.4737|
+| test  PMSE|   66500.46|    66547.95|    66520.28|   66513.63|    70403.31|   66507.54|      75494|
+
+<br>
+
+由上表可知 Linear Regression 在 train RMSE 和 test PMSE 之中是最小的。
+因此我們選擇使用lm模型去預測貸款金額。
+
+
