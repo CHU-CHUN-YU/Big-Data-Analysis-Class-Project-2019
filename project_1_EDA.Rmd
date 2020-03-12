@@ -1,0 +1,333 @@
+---
+title: "視覺化與探索性資料分析"
+output: html_document
+author: ""
+---
+#####資料名稱:Sberbank Russian Housing Market  
+
+#####資料說明:  
+The data is from August 2011 to June 2015. The dataset includes information about overall conditions in Russia's, so we can focus on generating accurate price forecasts for individual properties, without needing to second-guess what the business cycle will do.
+
+#####資料大小:292個變數,30471個觀察值
+我們將有高度共線性的變數刪除後，剩下94個變數。
+<br>
+
+#####研究問題
+* 預測2016年房價<br>
+* 分別探討investers 和 owners 購買房子的依據  
+根據我們的研究問題，以下的視覺化圖會探討房價和其他變數的關聯  
+以及 investers 和 owners 選擇買的房有甚麼不同的考量。
+<br>
+---
+
+
+```{r,include=FALSE}
+library(na.tools)
+library(corrplot)
+library(grid)
+library(ggplot2)
+```
+
+```{r,echo=FALSE}
+data=read.csv("E:\\annie\\3下課程\\巨量\\sberbank_russian_housing_market\\train00.csv")
+
+mat=matrix(NA,1,length(data))
+for (i in 1:length(data)){
+  mat[,i]<-na.n(data[i])
+}
+data<-data[,-which(mat>3000)]
+data=na.omit(data)
+
+
+num=matrix(NA,1:ncol(data))
+for ( i in 1: ncol(data)){
+  num[i]=is.numeric(data[,i])}
+data1<-data[,-which(num==FALSE)]
+attach(data)
+
+```
+
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(一)"}
+raion=data1[,c(5,7:15,94)]
+raion_cor<-cor(raion) 
+corrplot.mixed(raion_cor, lower.col = "black", number.cex = .7,tl.cex = 0.6,tl.pos = "lt")
+```
+圖(一)顯示的是房價和房子所在區域附近不同的建築設施數量有甚麼關聯。<br>
+由圖(一)可知，和教育相關的建築像是學校和補習班，與休閒活動相關之建築像是購物中心或健身房之變數關聯性較高，但是這些變數和房價之間沒有明顯的關聯。
+---
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(二)"}
+count=data1[,c(77:82,88:93,94)]
+count_cor<-cor(count)
+corrplot.mixed(count_cor, lower.col = "black", number.cex = .7,tl.cex = 0.6,tl.pos = "lt")
+```
+圖(二)顯示的是房價和房子500米內不同的建築設施數量有甚麼關聯。<br>
+由圖(二)可知，500米內辦公室的坪數和數量與購物商場之坪數和數量之變數關聯性較高，但是這些變數與房價也沒有明顯的關聯。
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(三)"}
+pop=data1[,c(3,4,6,8,16:19,94)]
+pop_cor<-cor(pop)
+corrplot.mixed(pop_cor, lower.col = "black", number.cex = .7,tl.cex = 0.6,tl.pos = "lt")
+```
+圖(三)顯示的是房價和房子附近不同的人口之間有甚麼關聯性。<br>
+由圖(三)可知，自治區的人口數量和非老年人口有高度關聯，但是與房價沒有明顯關聯。
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(四)"}
+km=data1[,c(20:30,94)]
+km_cor<-cor(km)
+corrplot.mixed(km_cor, lower.col = "black", number.cex = .7,tl.cex = 0.6,tl.pos = "lt")
+
+```
+圖(四)顯示的是房價和房子到不同地點的距離有甚麼關聯。<br>
+由圖(四)可知，房子與地鐵之距離遠近和與學校之距離遠近有高度關聯性，但與房價也沒有明顯關聯。
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(五)"}
+c=c(3,19,22,25,26,91,109)
+d=data[,c]
+
+for ( i in 1:6) {
+  d[,i]<- as.factor(d[,i])
+}
+
+
+
+#head(dd)
+multiplot <- function(..., plotlist=NULL, file, cols=6, layout=NULL) {
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  numPlots = length(plots)
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+library(ggplot2)
+#ggplot() + geom_boxplot(d2, aes(type, price_doc), fill=product_type)+xlab("")
+
+b1<-ggplot()+geom_boxplot(aes(x=d[,1],y=d[,7]),color="steelblue3", outlier.shape=16,outlier.size=0.5)+theme(axis.text.x =element_text(angle=0))+xlab("product_type")+ylab("house_price")
+
+
+b2<-ggplot()+ geom_boxplot(aes(x=d[,2],y=d[,7]),color="slateblue2",outlier.shape=16,outlier.size=1)+theme(axis.text.x =element_text(angle=0))+
+xlab( "thermal_power_plant_raion" )+ylab("house_price")
+
+
+b3<-ggplot()+geom_boxplot(aes(x=d[,3],y=d[,7]),color="lightseagreen", outlier.shape=16,outlier.size=1)+theme(axis.text.x =element_text(angle=0))+xlab( "radiation_raion" )+ylab("house_price")
+
+
+
+b4<-ggplot()+geom_boxplot(aes(x=d[,4],y=d[,7]),color="palevioletred3", outlier.shape=16,outlier.size=1)+theme(axis.text.x =element_text(angle=0))+xlab( "nuclear_reactor_raion" )+ylab("house_price")
+
+
+b5<-ggplot()+geom_boxplot(aes(x=d[,5],y=d[,7]),color="hotpink4", outlier.shape=16,outlier.size=1)+theme(axis.text.x =element_text(angle=0))+xlab( "detention_facility_raion" )+ylab("house_price")
+
+
+b6<-ggplot()+geom_boxplot(aes(x=d[,6],y=d[,7]),color="indianred2", outlier.shape=16,outlier.size=1)+theme(axis.text.x =element_text(vjust=0.2,angle=0))+xlab( "ecology" )+ylab("house_price")
+
+multiplot(b1,b2,b3,cols=3)
+
+```
+圖(五)、圖(六)顯示的是房價和類別變數之boxplot。 <br> 
+*由圖(五)左邊的圖可發現當購買者買房是用來投資的話，房價平均高於購屋自用者。<br>
+*而由圖(五)中間的圖我們發現，一般我們會認為鄰近火力發電場的房屋價格會因為附近空氣較不好所以價格會較低，但此圖顯示的卻不是這樣，附近有火力發電廠的房子價格反而高於附近沒有的。
+<br>
+*圖(五)右邊的圖也和中間的圖一樣，我們認為居民應該會選擇附近沒有放置核廢料的房屋，所以如果附近有的話，房價應該要比較低，但是圖中顯示的卻與我們期望相反，附近沒有放置核廢料的房屋之房價較高。
+<br>
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(六)"}
+multiplot(b4,b5,b6,cols=3)
+
+```
+
+*由圖(六)左邊的圖發現，原以為靠近核反應爐的房價會較低，結果附近有核反應爐的房價卻高於沒有的。
+<br>
+*圖(六)中間的圖是房價與附近有無監獄的盒狀圖，圖中顯示附近有監獄的會高於沒有的，我們認為應該是因為人較多的地方監獄需求會比較高，而人多房價相對也會較高，因次才會有這樣的結果。
+<br>
+
+*圖(六)右邊是生態環境滿意度與房價的盒狀圖，由此圖可發現，對生態環境最不滿意的組別其房價並不是最低的，最滿意也不是最高的，因此我們認為居民選擇房子較不會考量到房子附近的生態環境。
+<br>
+
+
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(七)"}
+
+
+
+p3<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=big_church_km,y=price_doc),color="cadetblue1")
+p4<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=big_market_km,y=price_doc),color="burlywood1")
+p5<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=museum_km,y=price_doc),color="plum3")
+p6<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=hospice_morgue_km,y=price_doc),color="darksalmon")
+p7<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=workplaces_km,y=price_doc),color="darkseagreen1")
+p8<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=catering_km,y=price_doc),color="deeppink")
+p9<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=exhibition_km,y=price_doc),color="rosybrown1")
+p10<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=stadium_km,y=price_doc),color="lightsteelblue1")
+p11<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=ts_km,y=price_doc),color="navajowhite2")
+p12<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=preschool_km,y=price_doc),color="magenta")
+p13<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=theater_km,y=price_doc),color="orange2")
+p14<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=kremlin_km,y=price_doc),color="seagreen3")
+p15<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=bulvar_ring_km,y=price_doc),color="moccasin")
+p16<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=oil_chemistry_km,y=price_doc),color="royalblue2")
+p17<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=public_healthcare_km,y=price_doc),color="red")
+p18<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=university_km,y=price_doc),color="limegreen")
+p19<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=shopping_centers_km,y=price_doc),color="plum4")
+p20<-ggplot(data,aes(y=price_doc))+geom_point(aes(x=ice_rink_km,y=price_doc),color="pink2")
+
+multiplot <- function(..., plotlist=NULL, file, cols=3, layout=NULL) {
+
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+
+multiplot(p3,p4,p5,p6,p7,p8,p9,p10,p11,cols=3)
+```
+<br>
+圖(七):各地點與房屋距離和房價的散佈圖  
+從上圖可以看出變數big_market_km和其他變數與房價的關係比較不一樣，距離大賣場較近的房價沒有比較高，這可能是因為大賣場通常會在郊區，所以離大賣場最近的房價不是最高的。圖中其餘的變數和房價的關系都差不多，因此之後在做預測的時候可以特別注意。
+
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(八)"}
+multiplot(p12,p13,p14,p15,p16,p17,p18,p19,p20,cols=3)
+```
+<br>
+圖(八):個地點與房屋距離和房價的散佈圖  
+從上圖可以看出變數bulvar_ring_km、kremlin_km、ice_rink_km和其他變數與房價的關係比較不一樣。這三個變數是俄羅斯較著名的景點，離景點最近的房子房價不是最高的，反而是在距離10到15km的房子，房價較高。還有一個是oil_chemistry_km，離石化一定距離的房子較高。<br>
+從圖(七)、圖(八)可以大概將這些關於距離的變數做分類。
+```{r,echo=FALSE ,fig.align="center",fig.cap="圖(九)"}
+#The price didn't go up as the numbers of schools go up
+ggplot(data=data, aes(x=school_education_centers_raion, y=price_doc ,col=school_education_centers_raion)) + geom_point()
+```
+<br>
+圖(九)房價與附近學校數量<br>
+預期房屋價格會隨著周遭學校數量上升而升。
+但當學校數量上升至一定數量時，房屋價格反而較低。
+
+####房屋用途(自用 or 投資)重視的買房依據有什麼不同?
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(十)"}
+ggplot(data,aes())+geom_point(data=data,aes(mosque_km,y=price_doc,color=product_type))
+```
+<br>
+圖(十): 離清真寺距離 and 房價 and 房屋用途(自用 or 投資)  
+有一些以投資為買房目的的人，選擇離清真寺比較遠的房子。
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(十一)"}
+ggplot(data,aes())+geom_point(data=data,aes(shopping_centers_raion,y=price_doc,color=product_type))
+```
+<br>
+圖(十一):離購物中心距離 and 房價 and 房屋用途(自用 or 投資)  
+一部分投資者會選擇於離購物中心較遠的房子購買;而房屋自用者會偏好離購物中心較近的房子。
+
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(十二)"}
+ggplot(data,aes())+geom_point(data=data,aes(full_sq,y=price_doc,color=product_type))
+```
+<br>
+圖(十二):房屋坪數 and 房價 and 房屋用途(自用 or 投資)  
+如果只是追求房屋坪數很大，不在意其它因素，將有機會以低廉價格購買到大坪數房屋。
+
+	
+```{r,echo=FALSE,fig.align="center",fig.cap="圖(十三)"}
+ggplot(data,aes())+geom_point(data=data,aes(school_education_centers_top_20_raion,y=price_doc,color=product_type))
+```
+<br>
+圖(十三):鄰域前20學校數量 and 房價 and 房屋用途(自用 or 投資)
+投資者較喜歡買在明星學區附近的房屋。  
+
+
+<br>
+
+###Appendix
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(green_part_500,y=price_doc,color=product_type))
+```
+
+<br>
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(industrial_km,y=price_doc,color=product_type))
+```
+
+<br>
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(green_part_500,y=price_doc,color=product_type))
+```
+
+<br>
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(fitness_km,y=price_doc,color=product_type))
+```
+
+<br>
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(green_part_500,y=price_doc,color=product_type))
+```
+
+<br>
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(culture_objects_top_25
+,y=price_doc,color=product_type))
+```
+
+<br>
+
+```{r,echo=FALSE,fig.align="center"}
+ggplot(data,aes())+geom_point(data=data,aes(additional_education_raion
+,y=price_doc,color=product_type))
+```
