@@ -1,0 +1,1102 @@
+---
+title: "Porto Seguro’s Safe Driver Prediction"
+author: "游筑鈞 劉得心 李駿"
+date: "2019年6月20日"
+output: 
+  revealjs::revealjs_presentation:
+    transition: zoom
+    theme: solarized
+    highlight: kate
+    center: true
+     
+---
+
+```{r,echo=FALSE,results='hide',warning=FALSE,message=FALSE,cache=TRUE}
+#install.packages('revealjs')
+library('revealjs')
+#install.packages('randomForest')
+library('randomForest')
+#install.packages('mlbench')
+library('mlbench')
+#install.packages('e1071')
+library('e1071')
+#install.packages('gbm')
+library('gbm')
+#install.packages('dplyr')
+library('dplyr')
+#install.packages('mice')
+library('mice')
+#install.packages('rpart')
+library('rpart')
+#install.packages('tidyr')
+library('tidyr')
+#install.packages('ggplot2')
+library('ggplot2')
+#install.packages('caret')
+library('caret')
+#install.packages('lattice')
+library('lattice')
+#install.packages('ROCR')
+library('ROCR')
+#install.packages('gplots')
+library('gplots')
+#install.packages('doParallel')
+library('doParallel')
+#install.packages('kernlab')
+library('kernlab')
+#install.packages('pROC')
+library('pROC')
+#install.packages('mgcv')
+library('mgcv')
+#install.packages('nlme')
+library('nlme')
+#install.packages('ggplot2')
+library('ggplot2')
+#install.packages('ggcorrplot')
+library('ggcorrplot')
+#install.packages('grid')
+library('grid')
+#install.packages('glmnet')
+library('glmnet')
+#install.packages('Matrix')
+library('Matrix')
+#install.packages('foreach')
+library('foreach')
+#install.packages('MLmetrics')
+library('MLmetrics')
+#install.packages('stepPlr')
+library('stepPlr')
+
+```
+
+
+```{r,echo=FALSE,cache=TRUE,warning=FALSE,message=FALSE}
+
+p31=read.table("E:\\P3\\train.csv",sep = ",",header = TRUE)
+
+#p3=read.table("E:\\P3\\train.csv",header = TRUE)
+#p3 = p3[,-1]
+#p3_n=p3[sample(c(which(p3$target==0)),40000,replace=F),]
+#p3=rbind(p3_n,p3[p3$target==1,])
+#p3=p3[,c(-1)]
+#dim(training)
+#dim(testing)
+```
+
+## 資料來源：Kaggle
+
+[https://www.kaggle.com/c/porto-seguro-safe-driver-prediction/data]
+
+## 資料介紹：
+
+61694個觀察值  56個變數<br>
+In this competition, you will predict the probability that an auto insurance policy holder files a claim.
+
+In the train and test data, features that belong to similar groupings are tagged as such in the feature names (e.g., ind, reg, car, calc). In addition, feature names include the postfix bin to indicate binary features and cat to indicate categorical features. Features without these designations are either continuous or ordinal. Values of -1 indicate that the feature was missing from the observation. The target columns signifies whether or not a claim was filed for that policy holder.
+
+
+## 研究目標
+The target columns signifies whether or not a claim was filed for that policy holder.
+
+## 遺失值
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,cache=TRUE,fig.width=6,fig.height=4}
+
+missing_values <- p31%>%summarize_all(funs(sum(is.na(.))+sum(.==-1,na.rm=T)))
+missing_values <- gather(missing_values, key="feature", value="missing_pct")
+missing_values %>% 
+  ggplot(aes(x=reorder(feature,-missing_pct),y=missing_pct)) +
+  geom_bar(stat="identity",fill="red")+xlab("Variable")+ylab("Missing Count")+
+  coord_flip()+theme_bw()
+```
+把高於40%遺失值的變數直接刪除，並開始補值。
+
+## 補值方法
+把高於40%遺失值的變數直接刪除，並開始補值。
+補值是使用R的'mice'套件，並使用CART補值法。
+
+
+## 視覺化分析(一)
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+p3=read.table("E:\\P3\\newdata.csv",sep = ",",header = TRUE)
+p3<-p3[,-1]
+set.seed(500)
+inTrain <- createDataPartition(y=p3$target, p=0.8, list=FALSE)
+training <- p3[inTrain,]
+testing <- p3[-inTrain,]
+
+```
+
+
+```{r ,echo = FALSE,cache=TRUE,fig.width=6,fig.height=4,warning=FALSE,message=FALSE}
+
+#相關矩陣
+p3_con<-p3[,c(2,4,15,16,20,21,22,32:50)]
+corr <- round(cor(p3_con), 1)
+ggcorrplot(corr, hc.order = TRUE, type = "lower",
+           lab = TRUE)
+
+```
+
+變數ps_car_13與ps_car_12相關係數最高，有0.7。
+資料集內唯一的負相關係數都為-0.1
+
+## 視覺化分析(二)
+
+```{r,echo=FALSE,results='hide',warning=FALSE,message=FALSE,cache=TRUE}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) { 
+  library(grid) 
+  
+  # Make a list from the ... arguments and plotlist 
+  plots <- c(list(...), plotlist) 
+  
+  numPlots = length(plots) 
+  
+  # If layout is NULL, then use 'cols' to determine layout 
+  if (is.null(layout)) { 
+    # Make the panel 
+    # ncol: Number of columns of plots 
+    # nrow: Number of rows needed, calculated from # of cols 
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)), 
+                     ncol = cols, nrow = ceiling(numPlots/cols)) 
+  } 
+  
+  if (numPlots==1) { 
+    print(plots[[1]]) 
+    
+  } else { 
+    # Set up the page 
+    grid.newpage() 
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout)))) 
+    
+    # Make each plot, in the correct location 
+    for (i in 1:numPlots) { 
+      # Get the i,j matrix positions of the regions that contain this subplot 
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE)) 
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row, 
+                                      layout.pos.col = matchidx$col)) 
+    } 
+  } 
+}  
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+p4=read.table("E:\\P3\\train.csv",sep=",",header = TRUE)
+
+p19=ggplot(p4, aes(x=ps_car_12, y=ps_car_13 , col=factor(target))) + geom_point()+ theme(legend.position = "none") 
+p20=ggplot(p4, aes(x=ps_car_12, y=ps_car_14 , col=factor(target))) + geom_point()+ theme(legend.position = "bottom") 
+p21=ggplot(p4, aes(x=ps_car_14, y=ps_car_13 , col=factor(target))) + geom_point()+ theme(legend.position = "none") 
+p22=ggplot(p4, aes(x=ps_car_15, y=ps_car_13 , col=factor(target))) + geom_point()+ theme(legend.position = "bottom") 
+p23=ggplot(p4, aes(x=ps_reg_01, y=ps_reg_02 , col=factor(target))) + geom_point()+ theme(legend.position = "none") 
+p24=ggplot(p4, aes(x=ps_reg_02, y=ps_reg_03 , col=factor(target))) + geom_point()+ theme(legend.position = "bottom") 
+multiplot(p21, p22, cols=2)
+```
+
+
+右圖中，隨著ps_car_15的增加，ps_car_13在不管變數target是"No"或"Yes"的情況下都有隨之上升的趨勢。
+
+
+
+
+```{r,echo=FALSE,results='hide',warning=FALSE,message=FALSE,cache=TRUE}
+
+# Create training(80%) and test sets(20%)
+set.seed(500)
+
+# traincontrol (70% & 30%) (10-fold-cv)
+
+set.seed(50)
+ctrl <- trainControl(method = "cv", number = 10, p=0.7, returnResamp='all',
+                    search='grid',savePredictions='all',selectionFunction = 'best', 
+                     summaryFunction = twoClassSummary,classProbs = TRUE)
+```
+
+## 01 logistic regression without any variable/model selection 
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_1 <- train(target~.,training, method="glm", trControl = ctrl,
+                 family=binomial(link="logit"))
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_1$pred$Yes)^2)/nrow(training))
+rmse
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_1
+```
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_1, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_1, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_1, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+## 02 logistic regression with one method of variable/model selections
+
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_2<-train(target ~ ps_car_13 + ps_ind_17_bin + ps_ind_05_cat + ps_reg_03 + 
+                  ps_ind_15 + ps_car_07_cat + ps_ind_06_bin + ps_reg_01 + ps_ind_09_bin + 
+                  ps_car_14 + ps_ind_02_cat + ps_ind_03 + ps_car_12 + ps_ind_04_cat + 
+                  ps_car_11 + ps_car_01_cat + ps_ind_01 + ps_car_15 + ps_calc_05 + 
+                  ps_calc_02 + ps_car_02_cat + ps_car_06_cat, data=training, method="glm", trControl = ctrl)
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_2$pred$Yes)^2)/nrow(training))
+rmse
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_2
+```
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_2, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_2, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_2, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+
+## 03 logistic rigid regression
+
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+library(ROCR)
+
+# Dumy code categorical predictor variables
+x <- model.matrix(target~., training)[,-1]
+# Convert the outcome (class) to a numerical variable
+
+y <- ifelse(training$target == "Yes", 1, 0)
+
+# Find the best lambda using cross-validation
+set.seed(123) 
+cv.rigid <- cv.glmnet(x, y, alpha = 0, family = "binomial")
+plot(cv.rigid)
+```
+
+lambda.min
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+cv.rigid$lambda.min
+
+```
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+model_3 <- glmnet(x, y, alpha = 0, family = "binomial",
+                  lambda = cv.rigid$lambda.min)
+```
+
+
+## predict01
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+x_test=model.matrix(~.-target,testing)[,-1]
+preds <- predict(model_3, newx = x_test , type = 'response')
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+#  ROC分析
+perf <- performance(prediction(preds, testing$target), 'tpr', 'fpr')
+plot(perf)
+```
+
+## predict02
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+x_test=model.matrix(~.-target,testing)[,-1]
+probabilities <- model_3 %>% predict(newx = x_test)
+predicted.classes <- ifelse(probabilities > 0.5, "Yes", "No")
+con<-confusionMatrix(as.factor(predicted.classes), as.factor(testing$target))
+con
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+for (i in 1:5){
+  v=sample(1:n,size=n,replace=T)
+  btest=testing[v,]
+  predictions <- predict(model_3, newx = x_test , type = 'response')
+  target_1_0<-as.integer(btest$target)-1
+  RMSE[i]=sqrt(sum((target_1_0-predictions[,1])^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+## 04 logistic lasso regression
+
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+# Dumy code categorical predictor variables
+x <- model.matrix(target~., training)[,-1]
+# Convert the outcome (class) to a numerical variable
+
+y <- ifelse(training$target == "Yes", 1, 0)
+
+# Find the best lambda using cross-validation
+set.seed(123) 
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+plot(cv.lasso)
+
+```
+
+lambda.min
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+cv.lasso$lambda.min
+
+```
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+model_4 <- glmnet(x, y, alpha = 1, family = "binomial",
+                  lambda = cv.lasso$lambda.min)
+
+```
+
+
+## predict01
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+x_test=model.matrix(~.-target,testing)[,-1]
+preds <- predict(model_4, newx = x_test , type = 'response')
+
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+#  ROC分析
+perf <- performance(prediction(preds, testing$target), 'tpr', 'fpr')
+plot(perf)
+```
+
+## predict02
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+x_test=model.matrix(~.-target,testing)[,-1]
+probabilities <- model_4 %>% predict(newx = x_test)
+predicted.classes <- ifelse(probabilities > 0.5, "Yes", "No")
+con<-confusionMatrix(as.factor(predicted.classes), as.factor(testing$target))
+con
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+for (i in 1:5){
+  v=sample(1:n,size=n,replace=T)
+  btest=testing[v,]
+  predictions <- predict(model_4, newx = x_test , type = 'response')
+  target_1_0<-as.integer(btest$target)-1
+  RMSE[i]=sqrt(sum((target_1_0-predictions[,1])^2)/nrow(btest))
+}
+mean(RMSE)
+
+```
+
+
+
+##  06 LDA
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_6<-train(target~., data=training, method="lda", trControl=ctrl)
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_6$pred$Yes)^2)/nrow(training))
+rmse
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_6
+```
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_6, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_6, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_6, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+
+##  07 decision tree
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_7<-train(target~., data=training, method="rpart", trControl=ctrl)
+
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_7$pred$Yes)^2)/nrow(training))
+rmse
+
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_7
+```
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_7, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_7, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_7, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+##  08  KNN
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_8 <- train(target ~ ., data = training, method = "knn", trControl = ctrl)
+
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_8$pred$Yes)^2)/nrow(training))
+rmse
+
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_8
+```
+
+k
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+model_8$finalModel$k
+
+```
+
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_8, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_8, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_8, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+
+##  09 bagging
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_9<-train(target~.,data=training, method="treebag",trControl=ctrl)
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_9$pred$Yes)^2)/nrow(training))
+rmse
+
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_9
+```
+
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_9, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_9, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_9, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+##   10 random forest
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+#train
+
+model_10 <- train(target  ~ ., data = training, 
+                  method = "rf", trControl = ctrl, verbose = FALSE,ntree=100)
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_10$pred$Yes)^2)/nrow(training))
+rmse
+
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_10
+```
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_10$finalModel$mtry
+```
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_10, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_10, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_10, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+## 011 Boosting 
+```{r , echo = FALSE,message=FALSE,warning=FALSE,cache=TRUE}
+
+
+set.seed(123)
+model_11 <- train(target  ~ ., data = training, 
+                  method = "gbm", trControl = ctrl, verbose = FALSE)
+
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+# RMSE
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-model_11$pred$Yes)^2)/nrow(training))
+rmse
+
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_11
+```
+
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_11, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_11, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_11, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+
+## 013 Neural Networks
+
+```{r , echo = FALSE,message=FALSE,warning=FALSE,cache=TRUE,results='hide'}
+
+
+set.seed(123)
+numFolds <- trainControl(method = 'cv', number = 10, classProbs = TRUE, verboseIter = TRUE, 
+                         summaryFunction = twoClassSummary, preProcOptions = list(thresh = 0.75, ICAcomp = 3, k = 5))
+
+#training
+
+model_13 <- train(target~ . , data = training, method = 'nnet',trControl = numFolds, tuneGrid=expand.grid(size=c(10), decay=c(0.1)))
+
+
+```
+
+RMSE
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+target_1_0<-as.integer(training$target)-1
+rmse=sqrt(sum((target_1_0-environment(model_13[["modelInfo"]][["grid"]])[["model_1"]][["pred"]][["Yes"]])^2)/nrow(training))
+round(rmse,3)
+```
+
+ROC & Sensitivit & Specificity
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# ROC $ Sensitivit $ Specificity
+model_13
+```
+
+
+## predict01
+
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+pred<-predict(model_13, newdata=testing)
+```
+
+ROC分析
+```{r echo = FALSE,warning=FALSE,message=FALSE,fig.width=6,fig.height=4,cache=TRUE}
+
+#  ROC分析
+prob <- predict(model_13, newdata=testing, type="prob")
+pred1 <- prediction(prob$Yes, testing$target)
+perf <- performance(pred1, measure = "tpr", x.measure = "fpr")
+plot(perf)
+
+```
+
+AUC
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+# AUC
+auc <- performance(pred1, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+## predict02
+
+Confussion Matrix. 分類正確率 / 分類錯誤率
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+
+con<-confusionMatrix(as.factor(pred), as.factor(testing$target))
+con
+
+```
+
+five bootstrap cross-testing. 平均預測風險
+```{r echo = FALSE,warning=FALSE,message=FALSE,cache=TRUE}
+n=nrow(testing)
+RMSE=0
+
+for (i in 1:5){
+    v=sample(1:n,size=n,replace=T)
+    btest=testing[v,]
+    predictions <- predict(model_13, newdata=btest,type="prob")
+    target_1_0<-as.integer(btest$target)-1
+    RMSE[i]=sqrt(sum((target_1_0-predictions$Yes)^2)/nrow(btest))
+}
+mean(RMSE)
+```
+
+## 結果
+
+|            |           LM|  LM with AIC|         LDA|  Decision tree|          Knn|      bagging| random forest|
+|:----------:|:-----------:|:-----------:|:----------:|:-------------:|:-----------:|:-----------:|:------------:|
+|  train RMSE|        0.486|        0.486|       0.487|          0.831|        0.892|        0.496|         0.936|
+|  test  PMSE|        0.466|        0.466|       0.466|          0.474|        0.498|        0.474|         0.344|
+|         ROC|        0.619|         0.62|       0.619|          0.556|        0.543|        0.593|         0.842|
+| Sensitivity|        0.938|         0.94|       0.935|          0.956|        0.842|         0.86|         0.993|
+| Specificity|        0.129|        0.128|       0.137|          0.089|        0.199|        0.232|         0.607|
+|    Accuracy|        0.658|         0.66|       0.658|          0.651|        0.613|        0.643|         0.857|
+
+
+|            |     Boosting|  Neural Networks|
+|:----------:|:-----------:|:---------------:|
+|  train RMSE|        1.452|            0.486|        
+|  test  PMSE|        0.463|            0.467|      
+|         ROC|        0.632|            0.612|       
+| Sensitivity|        0.937|            0.926|      
+| Specificity|        0.147|            0.144|       
+|    Accuracy|        0.665|            0.656|
+
+
